@@ -1,0 +1,4 @@
+-r requirements.txt
+smbus2>=0.4      # PCA9685 driver
+# pigpio and picamera2 come from apt on Raspberry Pi OS:
+#   sudo apt install python3-picamera2 pigpio python3-pigpio

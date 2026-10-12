@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+build/
+*.so
+models/*.onnx
+models/*.pt
+*.csv
+.pytest_cache/

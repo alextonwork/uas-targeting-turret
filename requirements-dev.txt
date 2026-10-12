@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest>=7
+pybind11>=2.11   # build the C++ core
+onnx>=1.15       # live-path tests and quantization
+# Export/quantize only (laptop, not the Pi):
+# ultralytics>=8.1

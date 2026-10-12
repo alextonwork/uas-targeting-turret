@@ -1,0 +1,89 @@
+# Pan-tilt tracking testbench configuration.
+# Angles are degrees, rates deg/s, times seconds unless noted.
+# Any key can be overridden from the CLI: --set control.pan.pid.kp=5.0
+
+mode: sim                # sim | live
+
+camera:
+  source: 0              # OpenCV index / video path, or "picamera2" on a Pi
+  width: 640
+  height: 480
+  fps: 30
+  hfov_deg: 62.2         # Pi Camera v2: 62.2 x 48.8. Pi Camera v3: 66 x 41. Measure yours.
+  vfov_deg: 48.8
+  flip_horizontal: false
+  flip_vertical: false
+
+detector:
+  model: models/yolov8n_int8.onnx
+  input_size: 320        # 320 is the speed/accuracy sweet spot on a Pi 4/5
+  conf_threshold: 0.35
+  iou_threshold: 0.45
+  # Class ids to keep. Stock COCO weights have no "drone" class; 4=airplane,
+  # 14=bird, 33=kite are rough proxies. Fine-tune on a drone dataset and set [0].
+  classes: [4, 14, 33]
+  num_threads: 4
+  max_detections: 10
+
+tracker:
+  gate_chi2: 13.8        # 99.9% gate for 2 DOF; detections outside are rejected
+  max_gate_deg: 6.0      # hard cap on association distance, whatever the covariance says
+  gate_growth: 25.0      # deg added to that cap per second spent coasting
+  max_target_rate: 90.0  # deg/s clamp on the velocity used for prediction
+  confirm_hits: 2        # detections needed before the gimbal starts following
+  coast_timeout: 1.0     # predict through occlusion this long before declaring lost
+  coast_velocity_tau: 0.5  # s; predicted velocity decays with this time constant while coasting
+  lost_hold_time: 0.8    # after loss, hold on the last aim point this long, then search
+  latency_compensation: true   # aim where the target will be, not where it was
+
+kalman:
+  process_accel_std: 60.0
+  meas_std: 0.4
+  init_vel_std: 30.0
+  enabled: true          # false = baseline: steer on raw detections, no coasting
+
+control:
+  backend: auto          # auto | cpp | python
+  rate_hz: 100           # actuation loop rate
+  return_home_rate: 30.0
+  search:                # raster scan after a lost track (enabled: false = return home and wait)
+    enabled: true
+    rate: 40.0           # pan sweep rate, deg/s
+    rows: [10.0, 30.0, 50.0]   # tilt angles of the scan rows
+    pan_limits: [-60.0, 60.0]
+  pan:
+    min_angle: -85.0
+    max_angle: 85.0
+    max_accel: 2500.0
+    feedforward_gain: 0.9
+    pid: {kp: 6.0, ki: 0.6, kd: 0.12, out_limit: 300.0, i_limit: 40.0, deadband: 0.35, d_filter_hz: 15.0}
+  tilt:
+    min_angle: -10.0
+    max_angle: 70.0
+    max_accel: 2000.0
+    feedforward_gain: 0.9
+    pid: {kp: 5.0, ki: 0.5, kd: 0.10, out_limit: 250.0, i_limit: 30.0, deadband: 0.35, d_filter_hz: 15.0}
+
+servo:
+  driver: mock           # mock | pca9685 | pigpio
+  slew_rate: 330.0       # deg/s the servo can actually move (MG996R ~ 0.19 s/60 deg at 6 V)
+  pan:  {channel: 0, gpio: 18, min_us: 500, max_us: 2500, range_deg: 180, trim_deg: 0.0, invert: false}
+  tilt: {channel: 1, gpio: 13, min_us: 500, max_us: 2500, range_deg: 180, trim_deg: 0.0, invert: false}
+  pca9685: {bus: 1, address: 0x40, frequency: 50}
+
+sim:
+  duration: 30.0
+  seed: 7
+  inference_ms: 28.0     # emulated detector latency (Pi 5 + int8 YOLOv8n @320 is ~25-35 ms)
+  inference_jitter_ms: 6.0
+  meas_noise_px: 2.0
+  miss_prob: 0.05        # random per-frame missed detections
+  false_pos_rate: 0.03   # random clutter detections per frame
+  occlusions_per_min: 8
+  occlusion_duration: [0.25, 0.9]
+  target_speed: [8.0, 45.0]    # deg/s, picked per manoeuvre segment
+  segment_duration: [0.6, 2.5] # seconds between abrupt velocity changes
+
+metrics:
+  log_interval: 2.0
+  csv: null              # path to write per-frame timing rows, or null
